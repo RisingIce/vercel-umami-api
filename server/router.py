@@ -5,13 +5,6 @@ import json
 import os
 import time
 
-#获取并构建umami相关参数
-umami_token = os.environ.get("umami_token")
-umami_web_id = os.environ.get("umami_web_id")
-umami_url = os.environ.get("umami_url")
-
-cache_time = 600  # 缓存时间为10分钟（600秒）
-
 # 获取当前时间戳（毫秒级）
 current_timestamp = int(time.time() * 1000)
 
@@ -22,24 +15,52 @@ start_timestamp_last_month = int(time.mktime(time.strptime(time.strftime('%Y-%m'
 start_timestamp_last_year = int(time.mktime(time.strptime(time.strftime('%Y', time.localtime(time.time() - 31536000)) + '-01-01', '%Y-%m-%d')) * 1000)
 
 
-# 定义 Umami API 请求函数
-def fetch_umami_data(umami_url, website_id, start_at, end_at, umami_token):
-    url = f"{umami_url}/api/websites/{website_id}/stats"
-    headers = {
-        "Authorization": f"Bearer {umami_token}",
-        "Content-Type": "application/json"
-    }
-    params = {
-        'startAt': start_at,
-        'endAt': end_at
-    }
+class UAPI:
+    def __init__(self) -> None:
+        self._umami_url = os.environ.get("umami_url")
+        self._website_id = os.environ.get("website_id")
+        self._authorization = "Bearer " + os.environ.get("umami_token")
+        self._cache_time = 600000
 
-    try:
-        response = requests.get(url, headers=headers, params=params)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching data: {e}")
+    # 定义 Umami API 请求函数
+    def fetch_umami_data(self,start_at,end_at):
+        url = f"{self._umami_url}/api/websites/{self._website_id}/stats"
+
+        headers = {
+            "Authorization": self._authorization,
+            "Accept":"*/*"
+        }
+        params = {
+            'startAt': start_at,
+            'endAt': end_at
+        }
+
+        try:
+            response = requests.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching data: {e}")
+            return None
+
+    #判断字典所有键值不为空
+    def _valueIsexist(self,data:dict) -> bool:
+        if data == {} or data == None:
+            return False
+        else:
+            for value in data.values():
+                if value == None:
+                    return False
+        return True
+
+    # 检查缓存
+    def check_cache(self,kv_cache_time):
+        nowstr = int(time.time() * 1000)
+        if nowstr - int(kv_cache_time) < self._cache_time:
+            cached_data = kv.get('umami_cache')
+            cache_json = json.loads(cached_data)
+            if self._valueIsexist(cache_json):
+                return cache_json
 
 from typing import Optional
 
@@ -87,26 +108,21 @@ class KV:
 
 
 kv = KV()
-
+ua = UAPI()
 router = APIRouter()
 
 #umami统计接口
 @router.get("/umami-stats",response_model=Umami_resp)
 async def umami():
-    # 检查缓存
+ # 检查缓存
     kv_cache_time = kv.get("cache_time") 
-    #判断缓存是否超过10分钟
-    if (kv_cache_time and int(time.time()) - int(kv_cache_time) < cache_time):
-        cached_data = kv.get('umami_cache')
-        if cached_data:
-            cahce_json = json.loads(cached_data)
-            return Umami_resp(**cahce_json)
-
+    ua.check_cache(kv_cache_time)
+    
     # 获取统计数据
-    today_data = fetch_umami_data(umami_url, umami_web_id, start_timestamp_today, current_timestamp, umami_token)
-    yesterday_data = fetch_umami_data(umami_url,umami_web_id, start_timestamp_yesterday, start_timestamp_today, umami_token)
-    last_month_data = fetch_umami_data(umami_url,umami_web_id, start_timestamp_last_month, current_timestamp, umami_token)
-    last_year_data = fetch_umami_data(umami_url, umami_web_id, start_timestamp_last_year, current_timestamp, umami_token)
+    today_data = ua.fetch_umami_data(start_timestamp_today, current_timestamp)
+    yesterday_data =ua.fetch_umami_data(start_timestamp_yesterday, start_timestamp_today)
+    last_month_data = ua.fetch_umami_data(start_timestamp_last_month, current_timestamp)
+    last_year_data =ua.fetch_umami_data(start_timestamp_last_year, current_timestamp)
 
     # 组装返回的 JSON 数据
     response_data = {
@@ -117,9 +133,8 @@ async def umami():
             "last_month_pv": last_month_data.get('pageviews', {}).get('value') if last_month_data else None,
             "last_year_pv": last_year_data.get('pageviews', {}).get('value') if last_year_data else None
         }
-    #存储当前时间戳（秒级）
-    kv.set(key='cache_time', value=int(time.time()))
-    #存入数据
+    
+    kv.set(key='cache_time', value=int(time.time() * 1000))
     kv.set(key='umami_cache', value=response_data)
 
     return Umami_resp(**response_data)
