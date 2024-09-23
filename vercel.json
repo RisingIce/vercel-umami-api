@@ -2,7 +2,11 @@
     "builds": [
       {"src": "/server/api.py", "use": "@vercel/python"}
     ],
+    "functions": { "server/api.py": {
+      "maxDuration": 60
+    },
     "routes": [
       {"src": "/(.*)", "dest": "server/api.py"}
     ]
-  }
+ }
+}
