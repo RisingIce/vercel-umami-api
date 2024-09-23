@@ -1,7 +1,7 @@
 from fastapi import FastAPI
-from server.router import router 
+from api.router import router 
 from fastapi.middleware.cors import CORSMiddleware
-from server.config import origins
+from api.config import origins
 app = FastAPI(redoc_url =None,docs_url = None)
 app.include_router(router)
 

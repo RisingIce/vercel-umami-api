@@ -1,12 +1,9 @@
 {
-    "builds": [
-      {"src": "/server/api.py", "use": "@vercel/python"}
-    ],
-    "functions": { "server/api.py": {
-      "maxDuration": 60
-    },
-    "routes": [
-      {"src": "/(.*)", "dest": "server/api.py"}
-    ]
- }
+  "rewrites": [{ "source": "/(.*)", "destination": "api/api" }],
+  "functions": {
+      "api/api.py": {
+        "memory": 1024,
+        "maxDuration": 60
+      }
+  }
 }

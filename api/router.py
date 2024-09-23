@@ -1,5 +1,5 @@
 from fastapi import APIRouter,HTTPException
-from server.schame import Umami_resp,KVConfig,Opts
+from api.schame import Umami_resp,KVConfig,Opts
 import requests
 import json
 import os
